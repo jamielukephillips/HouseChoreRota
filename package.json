@@ -1,0 +1,10 @@
+{
+  "name": "HouseChoreRota",
+  "version": "1.0.0",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "firebase": "^10.13.0",
+    "xlsx": "^0.18.5"
+  }
+}

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Schedule</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <!-- Firebase App (the core Firebase SDK) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <!-- Firebase Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+<h1>Task Schedule</h1>
+<table id="taskTable">
+    <thead>
+    <tr>
+        <th>Week Commencing</th>
+        <th>Kitchen & Living Room</th>
+        <th>Conservatory, Laundry & Hallways/Stairs</th>
+        <th>Garden</th>
+    </tr>
+    </thead>
+    <tbody>
+    <!-- Table rows will be inserted here by JavaScript -->
+    </tbody>
+</table>
+
+<script>
+    // Firebase configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyDSQldYHWuR_XHxECwKS-rnfkcq7SRber8",
+        authDomain: "h0useh0ld-ch0r3z.firebaseapp.com",
+        projectId: "h0useh0ld-ch0r3z",
+        storageBucket: "h0useh0ld-ch0r3z.appspot.com",
+        messagingSenderId: "771768796151",
+        appId: "1:771768796151:web:4e54e1c6a78d4275dfa4f2"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+
+    // Initialize Firestore
+    const db = firebase.firestore();
+
+    const names = ["Elsie", "Hilary", "Jamie", "Liam"];
+    const numWeeks = 12;
+    const startDateStr = getDateOneWeekAgo();
+
+    function getDateOneWeekAgo() {
+        const today = new Date();
+        const oneWeekAgo = new Date(today);
+        oneWeekAgo.setDate(today.getDate()); //-7
+        return formatDate(oneWeekAgo); // Return date in DD-MMM format
+    }
+
+    function formatDate(date) {
+        const options = { day: '2-digit', month: 'short' };
+        return date.toLocaleDateString('en-GB', options); // Format as DD-MMM
+    }
+
+    function getNextWeeks(startDateStr, numWeeks) {
+        const startDate = new Date(startDateStr + ' 2024'); // Ensure year is included
+        const startDay = startDate.getDay();
+        const daysToMonday = (startDay === 0) ? 1 : (8 - startDay) % 7;
+        const startMonday = new Date(startDate);
+        startMonday.setDate(startDate.getDate() + daysToMonday);
+        const weeks = [];
+        for (let i = 0; i < numWeeks; i++) {
+            const weekStart = new Date(startMonday);
+            weekStart.setDate(startMonday.getDate() + i * 7);
+            weeks.push(formatDate(weekStart)); // Format as DD-MMM
+        }
+        return weeks;
+    }
+
+    function getClassForName(name) {
+        switch (name) {
+            case "Elsie":
+                return "yellow";
+            case "Jamie":
+                return "green";
+            case "Liam":
+                return "orange";
+            case "Hilary":
+                return "purple";
+            default:
+                return "";
+        }
+    }
+
+    function applyColorCoding() {
+        const cells = document.querySelectorAll('td');
+        cells.forEach(cell => {
+            const text = cell.textContent.trim();
+            const className = getClassForName(text);
+            cell.className = className;
+        });
+    }
+
+    function populateTable() {
+        const weeks = getNextWeeks(startDateStr, numWeeks);
+        const tbody = document.querySelector('#taskTable tbody');
+
+        db.collection("tasks").get().then((querySnapshot) => {
+            const tasks = querySnapshot.docs.map(doc => ({ ...doc.data(), week: doc.id }));
+
+            for (let i = 0; i < numWeeks; i++) {
+                const week = weeks[i];
+                const task = tasks.find(t => t.week === week) || {};
+                const nameIndex1 = i % names.length;
+                const nameIndex2 = (i + 1) % names.length;
+                const nameIndex3 = (i + 2) % names.length;
+                const gardenTask = (i % 3) === 0 ? names[nameIndex3] : "";
+
+                const row = `<tr>
+                        <td>${week}</td>
+                        <td contenteditable="true" data-week="${week}" data-task="1">${task.task1 || names[nameIndex1]}</td>
+                        <td contenteditable="true" data-week="${week}" data-task="2">${task.task2 || names[nameIndex2]}</td>
+                        <td contenteditable="true" data-week="${week}" data-task="3">${task.gardenTask || gardenTask}</td>
+                    </tr>`;
+
+                tbody.insertAdjacentHTML('beforeend', row);
+            }
+
+            applyColorCoding();
+
+            // Attach event listeners after populating the table
+            const editableCells = document.querySelectorAll('td[contenteditable]');
+            console.log(`Found ${editableCells.length} editable cells`);
+
+            editableCells.forEach(cell => {
+                cell.addEventListener('input', (event) => {
+                    const cell = event.target;
+                    const week = cell.getAttribute('data-week');
+                    const taskType = cell.getAttribute('data-task');
+                    const newValue = cell.textContent.trim();
+
+                    console.log(`Updating week: ${week}, task: ${taskType}, value: ${newValue}`);
+
+                    const updateData = {};
+                    if (taskType === "1") updateData.task1 = newValue;
+                    if (taskType === "2") updateData.task2 = newValue;
+                    if (taskType === "3") updateData.gardenTask = newValue;
+
+                    db.collection("tasks").doc(week).set(updateData, { merge: true })
+                        .then(() => {
+                            console.log(`Document successfully updated for week ${week}`);
+                        })
+                        .catch((error) => {
+                            console.error("Error updating document: ", error);
+                        });
+
+                    applyColorCoding();
+                });
+            });
+        }).catch((error) => {
+            console.error("Error getting documents: ", error);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        populateTable();
+    });
+</script>
+</body>
+</html>
