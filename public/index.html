@@ -25,7 +25,6 @@
     <!-- Table rows will be inserted here by JavaScript -->
     </tbody>
 </table>
-
 <script>
     // Firebase configuration
     const firebaseConfig = {
@@ -42,50 +41,39 @@
 
     // Initialize Firestore
     const db = firebase.firestore();
-
     const names = ["Elsie", "Hilary", "Jamie", "Liam"];
     const numWeeks = 12;
-    const startDateStr = getDateOneWeekAgo();
 
-    function getDateOneWeekAgo() {
-        const today = new Date();
-        const oneWeekAgo = new Date(today);
-        oneWeekAgo.setDate(today.getDate()); //-7
-        return formatDate(oneWeekAgo); // Return date in DD-MMM format
-    }
-
+    // Get today's date and format as DD-MMM
     function formatDate(date) {
         const options = { day: '2-digit', month: 'short' };
-        return date.toLocaleDateString('en-GB', options); // Format as DD-MMM
+        return date.toLocaleDateString('en-GB', options);
     }
 
-    function getNextWeeks(startDateStr, numWeeks) {
-        const startDate = new Date(startDateStr + ' 2024'); // Ensure year is included
-        const startDay = startDate.getDay();
-        const daysToMonday = (startDay === 0) ? 1 : (8 - startDay) % 7;
-        const startMonday = new Date(startDate);
-        startMonday.setDate(startDate.getDate() + daysToMonday);
+    function getMondayOfCurrentWeek() {
+        const today = new Date();
+        const day = today.getDay();
+        const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+        return new Date(today.setDate(diff));
+    }
+
+    function getNextWeeks(startDate, numWeeks) {
         const weeks = [];
         for (let i = 0; i < numWeeks; i++) {
-            const weekStart = new Date(startMonday);
-            weekStart.setDate(startMonday.getDate() + i * 7);
-            weeks.push(formatDate(weekStart)); // Format as DD-MMM
+            const weekStart = new Date(startDate);
+            weekStart.setDate(startDate.getDate() + i * 7);
+            weeks.push(formatDate(weekStart));
         }
         return weeks;
     }
 
     function getClassForName(name) {
         switch (name) {
-            case "Elsie":
-                return "yellow";
-            case "Jamie":
-                return "green";
-            case "Liam":
-                return "orange";
-            case "Hilary":
-                return "purple";
-            default:
-                return "";
+            case "Elsie": return "yellow";
+            case "Jamie": return "green";
+            case "Liam": return "orange";
+            case "Hilary": return "purple";
+            default: return "";
         }
     }
 
@@ -98,69 +86,130 @@
         });
     }
 
-    function populateTable() {
-        const weeks = getNextWeeks(startDateStr, numWeeks);
-        const tbody = document.querySelector('#taskTable tbody');
+    function shiftRowsAndPopulateTable() {
+        const startDate = getMondayOfCurrentWeek();
+        const weeks = getNextWeeks(startDate, numWeeks + 1); // Get weeks including one extra for new row
 
+        // Remove the oldest week's data from Firestore
+        db.collection("tasks").doc(weeks[0]).delete().then(() => {
+            console.log("Deleted the oldest week's data");
+
+            // Now, shift the tasks manually
+            shiftTasksAndPopulate(weeks);
+
+        }).catch((error) => {
+            console.error("Error removing document: ", error);
+        });
+    }
+
+    function shiftTasksAndPopulate(weeks) {
         db.collection("tasks").get().then((querySnapshot) => {
-            const tasks = querySnapshot.docs.map(doc => ({ ...doc.data(), week: doc.id }));
+            let tasks = querySnapshot.docs.map(doc => ({ ...doc.data(), week: doc.id }));
 
-            for (let i = 0; i < numWeeks; i++) {
-                const week = weeks[i];
-                const task = tasks.find(t => t.week === week) || {};
-                const nameIndex1 = i % names.length;
-                const nameIndex2 = (i + 1) % names.length;
-                const nameIndex3 = (i + 2) % names.length;
-                const gardenTask = (i % 3) === 0 ? names[nameIndex3] : "";
-
-                const row = `<tr>
-                        <td>${week}</td>
-                        <td contenteditable="true" data-week="${week}" data-task="1">${task.task1 || names[nameIndex1]}</td>
-                        <td contenteditable="true" data-week="${week}" data-task="2">${task.task2 || names[nameIndex2]}</td>
-                        <td contenteditable="true" data-week="${week}" data-task="3">${task.gardenTask || gardenTask}</td>
-                    </tr>`;
-
-                tbody.insertAdjacentHTML('beforeend', row);
-            }
-
-            applyColorCoding();
-
-            // Attach event listeners after populating the table
-            const editableCells = document.querySelectorAll('td[contenteditable]');
-            console.log(`Found ${editableCells.length} editable cells`);
-
-            editableCells.forEach(cell => {
-                cell.addEventListener('input', (event) => {
-                    const cell = event.target;
-                    const week = cell.getAttribute('data-week');
-                    const taskType = cell.getAttribute('data-task');
-                    const newValue = cell.textContent.trim();
-
-                    console.log(`Updating week: ${week}, task: ${taskType}, value: ${newValue}`);
-
-                    const updateData = {};
-                    if (taskType === "1") updateData.task1 = newValue;
-                    if (taskType === "2") updateData.task2 = newValue;
-                    if (taskType === "3") updateData.gardenTask = newValue;
-
-                    db.collection("tasks").doc(week).set(updateData, { merge: true })
-                        .then(() => {
-                            console.log(`Document successfully updated for week ${week}`);
-                        })
-                        .catch((error) => {
-                            console.error("Error updating document: ", error);
-                        });
-
-                    applyColorCoding();
-                });
+            // Sort the tasks by week to ensure correct order
+            tasks.sort((a, b) => {
+                const weekA = weeks.indexOf(a.week);
+                const weekB = weeks.indexOf(b.week);
+                return weekA - weekB;
             });
+
+            // Determine the new tasks for the last week
+            const newTask1Index = (tasks.length - 1) % names.length;
+            const newTask2Index = (tasks.length) % names.length;
+            const newWeek = weeks[weeks.length - 1];
+
+            // Only assign the garden task every 4 weeks
+            const newGardenIndex = (tasks.length + 1) % names.length;
+            const gardenTask = (tasks.length + 1) % 4 === 0 ? names[newGardenIndex] : "";
+
+            // Add a new task for the new week
+            const newTask = {
+                task1: names[newTask1Index] || "",
+                task2: names[newTask2Index] || "",
+                gardenTask: gardenTask || "",
+                week: newWeek
+            };
+
+            tasks.push(newTask);
+
+            // Update Firestore with the new tasks
+            tasks.forEach(task => {
+                db.collection("tasks").doc(task.week).set(task, { merge: true })
+                    .then(() => {
+                        console.log(`Tasks updated for week ${task.week}`);
+                    })
+                    .catch((error) => {
+                        console.error("Error updating tasks: ", error);
+                    });
+            });
+
+            // Populate the table
+            populateTable(weeks.slice(1)); // Exclude the first week, as it's now removed
+
         }).catch((error) => {
             console.error("Error getting documents: ", error);
         });
     }
 
+    function populateTable(weeks) {
+        const tbody = document.querySelector('#taskTable tbody');
+        tbody.innerHTML = ''; // Clear existing rows
+
+        db.collection("tasks").get().then((querySnapshot) => {
+            const tasks = querySnapshot.docs.map(doc => ({ ...doc.data(), week: doc.id }));
+
+            // Sort tasks by their week
+            tasks.sort((a, b) => {
+                return weeks.indexOf(a.week) - weeks.indexOf(b.week);
+            });
+
+            // Log to verify the order and contents of tasks
+            console.log("Tasks after sorting:", tasks);
+
+            for (let i = 0; i < weeks.length; i++) {
+                const week = weeks[i];
+                const task = tasks.find(t => t.week === week) || {};
+                const row = `<tr>
+                        <td>${week}</td>
+                        <td contenteditable="true" data-week="${week}" data-task="1">${task.task1 || ""}</td>
+                        <td contenteditable="true" data-week="${week}" data-task="2">${task.task2 || ""}</td>
+                        <td contenteditable="true" data-week="${week}" data-task="3">${task.gardenTask || ""}</td>
+                    </tr>`;
+                tbody.insertAdjacentHTML('beforeend', row);
+            }
+            applyColorCoding();
+            attachEventListeners();
+        }).catch((error) => {
+            console.error("Error getting documents: ", error);
+        });
+    }
+
+    function attachEventListeners() {
+        const editableCells = document.querySelectorAll('td[contenteditable]');
+        editableCells.forEach(cell => {
+            cell.addEventListener('input', (event) => {
+                const cell = event.target;
+                const week = cell.getAttribute('data-week');
+                const taskType = cell.getAttribute('data-task');
+                const newValue = cell.textContent.trim();
+                const updateData = {};
+                if (taskType === "1") updateData.task1 = newValue;
+                if (taskType === "2") updateData.task2 = newValue;
+                if (taskType === "3") updateData.gardenTask = newValue;
+                db.collection("tasks").doc(week).set(updateData, { merge: true })
+                    .then(() => {
+                        console.log(`Document successfully updated for week ${week}`);
+                    })
+                    .catch((error) => {
+                        console.error("Error updating document: ", error);
+                    });
+                applyColorCoding();
+            });
+        });
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
-        populateTable();
+        shiftRowsAndPopulateTable();
     });
 </script>
 </body>
