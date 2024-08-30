@@ -52,7 +52,7 @@
 
     function getMondayOfCurrentWeek() {
         const today = new Date();
-        const day = today.getDay();
+        const day = today.getDay() - 14;
         const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
         return new Date(today.setDate(diff));
     }
@@ -90,19 +90,213 @@
         const startDate = getMondayOfCurrentWeek();
         const weeks = getNextWeeks(startDate, numWeeks + 1); // Get weeks including one extra for new row
 
-        // Remove the oldest week's data from Firestore
-        db.collection("tasks").doc(weeks[0]).delete().then(() => {
-            console.log("Deleted the oldest week's data");
+        // Retrieve tasks from Firestore
+        db.collection("tasks").get().then((querySnapshot) => {
+            const tasks = querySnapshot.docs.map(doc => ({...doc.data(), week: doc.id}));
+            const task = tasks.find(x => x.week === weeks[0]);
 
-            // Now, shift the tasks manually
-            shiftTasksAndPopulate(weeks);
+            console.log("The week to find is " + weeks[0]);
+
+            // Update taskers sequentially to ensure that deletion happens after these operations
+            if (task) {
+                Promise.all([
+                    updateTaskers("gardeners", "gardenTask", task),
+                    updateTaskers("taskers1", "task1", task),
+                    updateTaskers("taskers2", "task2", task),
+                    updateScores(task)
+                ]).then(() => {
+                    // After updating taskers, remove the oldest week's data from Firestore
+                    return db.collection("tasks").doc(weeks[0].week).delete();
+                }).then(() => {
+                    console.log("Deleted the oldest week's data");
+
+                    // Now, shift the tasks manually
+                    shiftTasksAndPopulate(weeks);
+
+                }).catch((error) => {
+                    console.error("Error updating taskers, scores or deleting old data: ", error);
+                });
+            }
+            else {
+                shiftTasksAndPopulate(weeks);
+            }
 
         }).catch((error) => {
-            console.error("Error removing document: ", error);
+            console.error("Error getting tasks: ", error);
+        });
+    }
+
+
+    function getTaskKeyValue(taskKey, task) {
+        console.log("Task key is currently " + taskKey);
+        if (taskKey === "task1") {
+            return task.task1 || "";
+        } else if (taskKey === "task2") {
+            return task.task2 || "";
+        } else if (taskKey === "gardenTask") {
+            return task.gardenTask || "";
+        } else {
+            console.log("Task key is undefined");
+            return "";
+        }
+    }
+
+    function updateScore(existingScores, task, key) {
+        if (task[key]) {
+            const taskScore = existingScores.find(x => x.name === task[key]);
+            if (taskScore) {
+                taskScore[key] = (taskScore[key] || 0) + 1;
+                db.collection("scores").doc(task[key]).set(taskScore, { merge: true });
+            } else {
+                // Create a new document with the dynamic key
+                db.collection("scores").doc(task[key]).set({
+                    name: task[key],
+                    [key]: 1
+                });
+            }
+        } else {
+            console.log("Task key could not be found for task " + task + " and key " + key);
+        }
+    }
+
+    function updateScores(task) {
+        return new Promise((resolve, reject) => {
+            db.collection("scores").get().then((querySnapshot) => {
+                let existingScores = querySnapshot.docs.map(doc => ({...doc.data(), name: doc.id}));
+                for (let key of ["task1", "task2", "gardenTask"]) {
+                    updateScore(existingScores, task, key);
+                }
+            }).then(() => {
+                console.log("Scores updated for week " + task.week);
+                resolve();
+            }).catch((error) => {
+                console.error("Error updating scores: ", error);
+                reject(error);
+            });
+        });
+    }
+
+    function updateTaskers(collectionName, taskKey, task) {
+        return new Promise((resolve, reject) => {
+            db.collection(collectionName).get().then((querySnapshot) => {
+                let existingTaskers = querySnapshot.docs.map(doc => ({...doc.data(), name: doc.id}));
+                let taskersToRemove = [];
+                let newTaskers = [];
+
+                const newTasker = {
+                    name: getTaskKeyValue(taskKey, task),
+                    task: taskKey,
+                    latestWeek: task.week
+                };
+
+                if (existingTaskers.length === names.length - 1 && !existingTaskers.some(tasker => tasker.name === newTasker.name)) {
+                    existingTaskers.sort((a, b) => new Date(a.latestWeek) - new Date(b.latestWeek));
+                    console.log("The existing taskers at this point are ", existingTaskers);
+                    const taskerToRemove = existingTaskers[0];
+                    taskersToRemove = [taskerToRemove.name];
+                    console.log("tasker to remove is " + taskerToRemove);
+                    newTaskers = existingTaskers.filter(tasker => tasker.name !== taskerToRemove.name);
+                    console.log("The new taskers at this point are ", newTaskers);
+                }
+
+                if (names.includes(newTasker.name)) {
+                    newTaskers.push(newTasker);
+                } else {
+                    console.log(`Tasker ${newTasker.name} is undefined`);
+                }
+
+                const updatePromises = newTaskers.map(tasker => {
+                    return db.collection(collectionName).doc(tasker.name).set(tasker, { merge: true });
+                });
+                const removePromises = taskersToRemove.map(name => {
+                    return db.collection(collectionName).doc(name).delete();
+                });
+
+                Promise.all([...updatePromises, ...removePromises])
+                    .then(() => {
+                        console.log(`${collectionName} updated for week ${task.week}`);
+                        resolve();
+                    })
+                    .catch((error) => {
+                        console.error(`Error updating ${collectionName}:`, error);
+                        reject(error);
+                    });
+            }).catch((error) => {
+                console.error(`Error getting ${collectionName} documents:`, error);
+                reject(error);
+            });
         });
     }
 
     function shiftTasksAndPopulate(weeks) {
+        let nextTasker1;
+        let nextTasker2;
+        let nextGardener = "";
+
+        const currentWeekMonday = getMondayOfCurrentWeek();
+
+        // Calculate the date 4 weeks ago from the Monday of the current week
+        const fourWeeksAgo = new Date(currentWeekMonday);
+        fourWeeksAgo.setDate(currentWeekMonday.getDate() - 28);
+
+        db.collection("taskers1").get().then((querySnapshot) => {
+            let taskers1 = querySnapshot.docs.map(doc => ({...doc.data(), name: doc.id}));
+            for (let name of names) {
+                if (!taskers1.some(tasker => tasker.name === name)) {
+                    nextTasker1 = name;
+                    break;
+                }
+            }
+            let taskers1Names = [];
+            taskers1.forEach(tasker => {
+                taskers1Names.push(tasker.name);
+            });
+            console.log("Taskers1 are " + taskers1Names + ", therefore Next tasker 1 is ", nextTasker1);
+        });
+        db.collection("taskers2").get().then((querySnapshot) => {
+            let taskers2 = querySnapshot.docs.map(doc => ({...doc.data(), name: doc.id}));
+            for (let name of names) {
+                if (!taskers2.some(tasker => tasker.name === name)) {
+                    nextTasker2 = name;
+                    break;
+                }
+            }
+            let taskers2Names = [];
+            taskers2.forEach(tasker => {
+                taskers2Names.push(tasker.name);
+            });
+            console.log("Taskers2 are " + taskers2Names + ", therefore Next tasker 2 is ", nextTasker2);
+        });
+
+        db.collection("gardeners").get().then((querySnapshot) => {
+            let gardeners = querySnapshot.docs.map(doc => ({...doc.data(), name: doc.id}));
+            const gardenerToUpdate = gardeners.some(gardener => {
+                let latestWeekDate = new Date(gardener.latestWeek);
+                let mondayFourWeeksBefore = getMondayOfCurrentWeek();
+                mondayFourWeeksBefore.setDate(mondayFourWeeksBefore.getDate() - 21);
+                const latestWeekMonthDay = latestWeekDate.toLocaleDateString('en-GB', { month: 'short', day: '2-digit' });
+                const fourWeeksAgoMonthDay = mondayFourWeeksBefore.toLocaleDateString('en-GB', { month: 'short', day: '2-digit' });
+                console.log("latest week date is ", latestWeekMonthDay);
+                console.log("date 4 weeks ago is ", fourWeeksAgoMonthDay);
+                return latestWeekMonthDay === fourWeeksAgoMonthDay;
+            });
+            if (gardenerToUpdate) {
+                // Find the first name from names that is not in the gardeners collection
+                for (let name of names) {
+                    if (!gardeners.some(gardener => gardener.name === name)) {
+                        nextGardener = name;
+                        break;
+                    }
+                }
+                let gardenerNames = [];
+                gardeners.forEach(tasker => {
+                    gardenerNames.push(tasker.name);
+                });
+                console.log("Gardeners are " + gardenerNames + ", therefore Next tasker 2 is ", nextGardener);
+            }
+
+        });
+
         db.collection("tasks").get().then((querySnapshot) => {
             let tasks = querySnapshot.docs.map(doc => ({ ...doc.data(), week: doc.id }));
 
@@ -113,24 +307,51 @@
                 return weekA - weekB;
             });
 
-            // Determine the new tasks for the last week
-            const newTask1Index = (tasks.length - 1) % names.length;
-            const newTask2Index = (tasks.length) % names.length;
-            const newWeek = weeks[weeks.length - 1];
+            if (tasks.length === 0) {
+                const emptyTask = {
+                    task1: "",
+                    task2: "",
+                    gardenTask: "",
+                    week: weeks[weeks.length - 1]
+                };
+                tasks.push(emptyTask);
+                console.log("Added empty task " + emptyTask + " now tasks are ", tasks);
+            } else {
+                // // Determine the new tasks for the last week
+                // const newTask1Index = (tasks.length - 1) % names.length;
+                // const newTask2Index = (tasks.length) % names.length;
+                //
+                // // Only assign the garden task every 4 weeks
+                // const newGardenIndex = (tasks.length + 1) % names.length;
+                // console.log("New garden index is ", newGardenIndex);
+                // const gardenTask = (tasks.length + 1) % 4 === 0 ? names[newGardenIndex] : "";
+                // console.log("Garden task is ", gardenTask || "None", " and tasks.length is " + tasks.length);
+                //
+                // // Add a new task for the new week
+                // const newTask = {
+                //     task1: names[newTask1Index] || "",
+                //     task2: names[newTask2Index] || "",
+                //     gardenTask: gardenTask || "",
+                //     week: newWeek
+                // };
 
-            // Only assign the garden task every 4 weeks
-            const newGardenIndex = (tasks.length + 1) % names.length;
-            const gardenTask = (tasks.length + 1) % 4 === 0 ? names[newGardenIndex] : "";
 
-            // Add a new task for the new week
-            const newTask = {
-                task1: names[newTask1Index] || "",
-                task2: names[newTask2Index] || "",
-                gardenTask: gardenTask || "",
-                week: newWeek
-            };
+                if (shouldUpdateLastRow(tasks[0])) {
+                    const newWeek = weeks[weeks.length - 1];
 
-            tasks.push(newTask);
+                    const newTask = {
+                        task1: nextTasker1,
+                        task2: nextTasker2,
+                        gardenTask: nextGardener,
+                        week: newWeek
+                    };
+
+                    tasks.push(newTask);
+                }
+                else {
+                    console.log("The week has not changed so not adding new week.");
+                }
+            }
 
             // Update Firestore with the new tasks
             tasks.forEach(task => {
@@ -150,6 +371,27 @@
             console.error("Error getting documents: ", error);
         });
     }
+
+    function shouldUpdateLastRow(lastTask) {
+        const currentMonday = getMondayOfCurrentWeek();
+        const lastTaskDate = new Date(lastTask.week);
+
+        lastTaskDate.setDate(lastTaskDate.getDate() - 7);
+
+        const currentMonth = currentMonday.getMonth();
+        const currentDay = currentMonday.getDate();
+        const lastMonth = lastTaskDate.getMonth();
+        const lastDay = lastTaskDate.getDate();
+
+        if (lastMonth < currentMonth || (lastMonth === currentMonth && lastDay < currentDay)) {
+            console.log(`Last task date (${lastMonth + 1}-${lastDay}) is before current Monday (${currentMonth + 1}-${currentDay})`);
+            return true;
+        } else {
+            console.log(`Last task date (${lastMonth + 1}-${lastDay}) is not before current Monday (${currentMonth + 1}-${currentDay})`);
+            return false;
+        }
+    }
+
 
     function populateTable(weeks) {
         const tbody = document.querySelector('#taskTable tbody');
