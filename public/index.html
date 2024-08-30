@@ -50,9 +50,9 @@
         return date.toLocaleDateString('en-GB', options);
     }
 
-    function getMondayOfCurrentWeek() {
+    function getMondayOfLastWeek() {
         const today = new Date();
-        const day = today.getDay() - 14;
+        const day = today.getDay() - 42;
         const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
         return new Date(today.setDate(diff));
     }
@@ -87,7 +87,7 @@
     }
 
     function shiftRowsAndPopulateTable() {
-        const startDate = getMondayOfCurrentWeek();
+        const startDate = getMondayOfLastWeek();
         const weeks = getNextWeeks(startDate, numWeeks + 1); // Get weeks including one extra for new row
 
         // Retrieve tasks from Firestore
@@ -233,7 +233,7 @@
         let nextTasker2;
         let nextGardener = "";
 
-        const currentWeekMonday = getMondayOfCurrentWeek();
+        const currentWeekMonday = getMondayOfLastWeek();
 
         // Calculate the date 4 weeks ago from the Monday of the current week
         const fourWeeksAgo = new Date(currentWeekMonday);
@@ -271,14 +271,14 @@
         db.collection("gardeners").get().then((querySnapshot) => {
             let gardeners = querySnapshot.docs.map(doc => ({...doc.data(), name: doc.id}));
             const gardenerToUpdate = gardeners.some(gardener => {
-                let latestWeekDate = new Date(gardener.latestWeek);
-                let mondayFourWeeksBefore = getMondayOfCurrentWeek();
-                mondayFourWeeksBefore.setDate(mondayFourWeeksBefore.getDate() - 21);
-                const latestWeekMonthDay = latestWeekDate.toLocaleDateString('en-GB', { month: 'short', day: '2-digit' });
-                const fourWeeksAgoMonthDay = mondayFourWeeksBefore.toLocaleDateString('en-GB', { month: 'short', day: '2-digit' });
-                console.log("latest week date is ", latestWeekMonthDay);
-                console.log("date 4 weeks ago is ", fourWeeksAgoMonthDay);
-                return latestWeekMonthDay === fourWeeksAgoMonthDay;
+                let latestGardenerDate = new Date(gardener.latestWeek);
+                let mondayFourWeeksAgo = getMondayOfLastWeek();
+                mondayFourWeeksAgo.setDate(mondayFourWeeksAgo.getDate() - 28);
+                const latestGardenerDay = latestGardenerDate.toLocaleDateString('en-GB', { month: 'short', day: '2-digit' });
+                const fourWeeksBeforeLastWeekDate = mondayFourWeeksAgo.toLocaleDateString('en-GB', { month: 'short', day: '2-digit' });
+                console.log("Latest gardener worked on ", latestGardenerDay);
+                console.log("Four weeks before last week was ", fourWeeksBeforeLastWeekDate);
+                return latestGardenerDay === fourWeeksBeforeLastWeekDate;
             });
             if (gardenerToUpdate) {
                 // Find the first name from names that is not in the gardeners collection
@@ -292,7 +292,7 @@
                 gardeners.forEach(tasker => {
                     gardenerNames.push(tasker.name);
                 });
-                console.log("Gardeners are " + gardenerNames + ", therefore Next tasker 2 is ", nextGardener);
+                console.log("Gardeners are " + gardenerNames + ", therefore next gardener is ", nextGardener);
             }
 
         });
@@ -373,7 +373,7 @@
     }
 
     function shouldUpdateLastRow(lastTask) {
-        const currentMonday = getMondayOfCurrentWeek();
+        const currentMonday = getMondayOfLastWeek();
         const lastTaskDate = new Date(lastTask.week);
 
         lastTaskDate.setDate(lastTaskDate.getDate() - 7);
