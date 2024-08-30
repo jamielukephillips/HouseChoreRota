@@ -52,7 +52,7 @@
 
     function getMondayOfLastWeek() {
         const today = new Date();
-        const day = today.getDay() - 42;
+        const day = today.getDay() - 35;
         const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
         return new Date(today.setDate(diff));
     }
@@ -81,8 +81,7 @@
         const cells = document.querySelectorAll('td');
         cells.forEach(cell => {
             const text = cell.textContent.trim();
-            const className = getClassForName(text);
-            cell.className = className;
+            cell.className = getClassForName(text);
         });
     }
 
@@ -194,7 +193,7 @@
                     console.log("The existing taskers at this point are ", existingTaskers);
                     const taskerToRemove = existingTaskers[0];
                     taskersToRemove = [taskerToRemove.name];
-                    console.log("tasker to remove is " + taskerToRemove);
+                    console.log("Tasker to remove is " + taskerToRemove);
                     newTaskers = existingTaskers.filter(tasker => tasker.name !== taskerToRemove.name);
                     console.log("The new taskers at this point are ", newTaskers);
                 }
@@ -228,6 +227,28 @@
         });
     }
 
+    function getRandomElement(array) {
+        const randomIndex = Math.floor(Math.random() * array.length);
+        console.log("Random index is " + randomIndex + " and val is " + array[randomIndex] + " and array is " + array);
+        return array[randomIndex];
+    }
+
+    function processTaskers(collectionName, names) {
+        return db.collection(collectionName).get().then((querySnapshot) => {
+            let taskers = querySnapshot.docs.map(doc => ({...doc.data(), name: doc.id}));
+
+            const availableNames = names.filter(name => !taskers.some(tasker => tasker.name === name));
+
+            const nextTasker = getRandomElement(availableNames);
+
+            let taskersNames = taskers.map(tasker => tasker.name);
+
+            console.log(`${collectionName} are ${taskersNames.join(', ')}, therefore Next tasker is`, nextTasker);
+
+            return nextTasker;
+        });
+    }
+
     function shiftTasksAndPopulate(weeks) {
         let nextTasker1;
         let nextTasker2;
@@ -239,33 +260,17 @@
         const fourWeeksAgo = new Date(currentWeekMonday);
         fourWeeksAgo.setDate(currentWeekMonday.getDate() - 28);
 
-        db.collection("taskers1").get().then((querySnapshot) => {
-            let taskers1 = querySnapshot.docs.map(doc => ({...doc.data(), name: doc.id}));
-            for (let name of names) {
-                if (!taskers1.some(tasker => tasker.name === name)) {
-                    nextTasker1 = name;
-                    break;
-                }
-            }
-            let taskers1Names = [];
-            taskers1.forEach(tasker => {
-                taskers1Names.push(tasker.name);
-            });
-            console.log("Taskers1 are " + taskers1Names + ", therefore Next tasker 1 is ", nextTasker1);
-        });
-        db.collection("taskers2").get().then((querySnapshot) => {
-            let taskers2 = querySnapshot.docs.map(doc => ({...doc.data(), name: doc.id}));
-            for (let name of names) {
-                if (!taskers2.some(tasker => tasker.name === name)) {
-                    nextTasker2 = name;
-                    break;
-                }
-            }
-            let taskers2Names = [];
-            taskers2.forEach(tasker => {
-                taskers2Names.push(tasker.name);
-            });
-            console.log("Taskers2 are " + taskers2Names + ", therefore Next tasker 2 is ", nextTasker2);
+        Promise.all([
+            processTaskers("taskers1", names),
+            processTaskers("taskers2", names)
+        ]).then(([tasker1, tasker2]) => {
+            nextTasker1 = tasker1;
+            nextTasker2 = tasker2;
+
+            console.log("Next tasker for taskers1 is", nextTasker1);
+            console.log("Next tasker for taskers2 is", nextTasker2);
+        }).catch((error) => {
+            console.error("Error processing taskers:", error);
         });
 
         db.collection("gardeners").get().then((querySnapshot) => {
@@ -281,16 +286,13 @@
                 return latestGardenerDay === fourWeeksBeforeLastWeekDate;
             });
             if (gardenerToUpdate) {
-                // Find the first name from names that is not in the gardeners collection
-                for (let name of names) {
-                    if (!gardeners.some(gardener => gardener.name === name)) {
-                        nextGardener = name;
-                        break;
-                    }
-                }
-                let gardenerNames = [];
-                gardeners.forEach(tasker => {
-                    gardenerNames.push(tasker.name);
+                const availableNames = names.filter(name => !gardeners.some(gardener => gardener.name === name));
+                nextGardener = getRandomElement(availableNames);
+
+                let gardenerNames = gardeners.map(gardener => gardener.name);
+
+                gardeners.forEach(gardener => {
+                    gardenerNames.push(gardener.name);
                 });
                 console.log("Gardeners are " + gardenerNames + ", therefore next gardener is ", nextGardener);
             }
@@ -340,9 +342,9 @@
                     const newWeek = weeks[weeks.length - 1];
 
                     const newTask = {
-                        task1: nextTasker1,
-                        task2: nextTasker2,
-                        gardenTask: nextGardener,
+                        task1: nextTasker1 || "",
+                        task2: nextTasker2 || "",
+                        gardenTask: nextGardener || "",
                         week: newWeek
                     };
 
