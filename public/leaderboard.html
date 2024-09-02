@@ -10,6 +10,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <!-- Firebase Firestore -->
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
 <!-- Bootstrap Navbar -->
@@ -34,8 +35,7 @@
 
 <!-- Main Content -->
 <div id=leaderboard" class="container mt-4">
-    <h1>Leaderboard</h1>
-    <br>
+    <h1>Leaderboard <i class="fa-solid fa-trophy" style="color: goldenrod;"></i></h1>
     <h2>Kitchen & Living Room</h2>
     <table id="task1" class="leaderboard">
         <thead>
@@ -115,12 +115,32 @@
                 console.log("Score to add is " + score["name"] + " with task " + score[task]);
                 const row = `<tr>
                         <td>${score["name"]}</td>
-                        <td>${scoreValue}</td>
+                        <td>${scoreValue} <i class="far fa-gem fa-lg" style="color: darkred;"></i></i></td>
                     </tr>`;
                 tbody.insertAdjacentHTML('beforeend', row);
             }
-
+            applyColorCoding();
         })
+    }
+
+    function applyColorCoding() {
+        const cells = document.querySelectorAll('td');
+        console.log("Entered apply color coding");
+        cells.forEach(cell => {
+            const text = cell.textContent.trim();
+            cell.className = getClassForName(text);
+            console.log("Cell text is " + text + " and class is " + cell.className);
+        });
+    }
+
+    function getClassForName(name) {
+        switch (name) {
+            case "Elsie": return "yellow";
+            case "Jamie": return "green";
+            case "Liam": return "orange";
+            case "Hilary": return "purple";
+            default: return "";
+        }
     }
 
     document.addEventListener('DOMContentLoaded', () => {
