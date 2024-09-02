@@ -16,6 +16,14 @@ table {
     border-collapse: collapse;
 }
 
+#schedule {
+    padding: 20px;
+}
+
+#leaderboard {
+    padding: 20px;
+}
+
 table, th, td {
     border: 1px solid black;
 }
