@@ -14,6 +14,10 @@
       {
         "source": "**",
         "destination": "/index.html"
+      },
+      {
+        "source": "/send-sms",
+        "destination": "https://calm-harbor-30933-518ac03ee06e.herokuapp.com/send-sms"
       }
     ]
   }

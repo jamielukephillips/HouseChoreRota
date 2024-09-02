@@ -368,7 +368,19 @@
                     week: newWeek
                 };
                 tasks.push(newTask);
-                sendSmsMessage();
+                if (nextTasker1 !== undefined) {
+                    console.log("Sending sms message for task1 to ", nextTasker1);
+                    sendSmsMessage("task1", nextTasker1);
+                }
+                if (nextTasker2 !== undefined) {
+                    console.log("Sending sms message for task2 to ", nextTasker2);
+                    sendSmsMessage("task2", nextTasker2);
+                }
+                if (nextGardener !== undefined) {
+                    console.log("Sending sms message for gardenTask to ", nextGardener);
+                    sendSmsMessage("gardenTask", nextGardener);
+                }
+
             }
 
             // Update Firestore with the new tasks
@@ -390,16 +402,74 @@
         });
     }
 
-    async function sendSmsMessage() {
+    function getPhoneNumber(tasker) {
+        switch (tasker) {
+            case "Jamie":
+                return "+447577737248";
+            case "Liam":
+                return "+447577737248";
+            case "Hilary":
+                return "+447577737248";
+            case "Elsie":
+                return "+447577737248";
+        }
+        return "+447577737248";
+    }
+
+    function getTaskItinerary(task) {
+        switch (task) {
+            case "task1":
+                return "- Sweeping, mopping, wiping surfaces, cleaning the sink, dish rack and inside of the microwave, replacing tea towels, emptying bins" +
+                    ", wiping down the kettle/toaster area and emptying the toaster tray.";
+            case "task2":
+                return "- Mopping, vacuuming, dusting, watering plants, wiping tables (replace tablecloth if needed), cleaning the utility sink, tidying couches" +
+                    ", wiping coffee table and emptying the mail bucket.";
+            case "gardenTask":
+                return "- Lawn-mowing, watering plants, weeding, picking fruit," +
+                    " sweeping the front (removing litter) and back garden path, hedge-trimming and keeping your lovely neighbour in good company.";
+        }
+    }
+
+    function getTaskFullName(task) {
+        switch (task) {
+            case "task1":
+                return "Kitchen & Living Room";
+            case "task2":
+                return "Conservatory, Laundry & Hallways/Stairs";
+            case "gardenTask":
+                return "Garden";
+            default:
+                return "";
+        }
+    }
+
+    async function sendSmsMessage(task, tasker) {
         try {
-            const response = await fetch('https://h0useh0ld-ch0r3z.web.app/send-sms', {
+            let messageBody = `
+            Hey ${tasker}, you have been assigned the ${getTaskFullName(task)} task this week!
+
+            Duties include:
+            ${getTaskItinerary(task)}
+
+            Thank you and good luck- you will be rewarded with a leaderboard gem for your work.
+
+            `
+            if (task === 'gardenTask') {
+                messageBody += `Much love from Evanthia XOXO (remember to pick the figs)`;
+            } else if (task === 'task2') {
+                messageBody += `Your help is much appreciated!!!`;
+            } else {
+                messageBody += `P.S. I look forward to seeing those sparkling surfaces!`;
+            }
+
+            const response = await fetch('https://calm-harbor-30933-518ac03ee06e.herokuapp.com/send-sms', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
-                    to: '+447577737248', // Recipient's phone number
-                    body: 'This is your scheduled weekly message!' // Message content
+                    to: getPhoneNumber(tasker), // Recipient's phone number
+                    body: messageBody
                 })
             });
 
