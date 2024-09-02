@@ -85,7 +85,7 @@
 
     function getMondayOfLastWeek() {
         const today = new Date();
-        const day = today.getDay();
+        const day = today.getDay() - 42;
         const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
         return new Date(today.setDate(diff));
     }

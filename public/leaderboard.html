@@ -6,6 +6,10 @@
     <title>Leaderboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="/assets/styles.css">
+    <!-- Firebase App (the core Firebase SDK) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+    <!-- Firebase Firestore -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <!-- Bootstrap Navbar -->
@@ -31,7 +35,9 @@
 <!-- Main Content -->
 <div id=leaderboard" class="container mt-4">
     <h1>Leaderboard</h1>
-    <table class="leaderboard">
+    <br>
+    <h2>Kitchen & Living Room</h2>
+    <table id="task1" class="leaderboard">
         <thead>
         <tr>
             <th>Name</th>
@@ -39,19 +45,33 @@
         </tr>
         </thead>
         <tbody>
+        <!-- Table rows inserted here by JavaScript -->
+        </tbody>
+    </table>
+    <br>
+    <h2>Conservatory, Laundry & Hallways/Stairs</h2>
+    <table id="task2" class="leaderboard">
+        <thead>
         <tr>
-            <td>Player One</td>
-            <td>1500</td>
+            <th>Name</th>
+            <th>Score</th>
         </tr>
+        </thead>
+        <tbody>
+        <!-- Table rows inserted here by JavaScript -->
+        </tbody>
+    </table>
+    <br>
+    <h2>Garden</h2>
+    <table id="gardenTask" class="leaderboard">
+        <thead>
         <tr>
-            <td>Player Two</td>
-            <td>1200</td>
+            <th>Name</th>
+            <th>Score</th>
         </tr>
-        <tr>
-            <td>Player Three</td>
-            <td>1000</td>
-        </tr>
-        <!-- Add more rows as needed -->
+        </thead>
+        <tbody>
+        <!-- Table rows inserted here by JavaScript -->
         </tbody>
     </table>
 </div>
@@ -63,16 +83,50 @@
 </html>
 
 <script>
+
+    // Firebase configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyDSQldYHWuR_XHxECwKS-rnfkcq7SRber8",
+        authDomain: "h0useh0ld-ch0r3z.firebaseapp.com",
+        projectId: "h0useh0ld-ch0r3z",
+        storageBucket: "h0useh0ld-ch0r3z.appspot.com",
+        messagingSenderId: "771768796151",
+        appId: "1:771768796151:web:4e54e1c6a78d4275dfa4f2"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+
+    // Initialize Firestore
+    const db = firebase.firestore();
+
     function orderScores(task) {
+        const tbody = document.querySelector(`#${task} tbody`);
+        tbody.innerHTML = ''; // Clear existing rows
         db.collection("scores").get().then((querySnapshot) => {
             let scores = querySnapshot.docs.map(doc => ({...doc.data(), name: doc.id}));
             scores.sort((a, b) => {
-                const scoreA = a[task];
-                const scoreB = b[task];
-                return scoreA - scoreB;
+                const scoreA = a[task] === undefined ? 0 : a[task];
+                const scoreB = b[task] === undefined ? 0 : b[task];
+                return scoreB - scoreA;
             });
+            for (let score of scores) {
+                const scoreValue = score[task] !== undefined ? score[task] : 0;
+                console.log("Score to add is " + score["name"] + " with task " + score[task]);
+                const row = `<tr>
+                        <td>${score["name"]}</td>
+                        <td>${scoreValue}</td>
+                    </tr>`;
+                tbody.insertAdjacentHTML('beforeend', row);
+            }
 
         })
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        orderScores("task1");
+        orderScores("task2");
+        orderScores("gardenTask");
+    });
 
 </script>
