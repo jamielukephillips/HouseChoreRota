@@ -12,6 +12,7 @@
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
     <!-- Firebase Firestore -->
     <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
 <!-- Bootstrap Navbar -->
@@ -37,7 +38,7 @@
 
 <!-- Main Content -->
 <div id="schedule" class="container mt-4">
-    <h1>Task Schedule</h1>
+    <h1>Task Schedule <i class="fa-solid fa-calendar-days" style="color: dodgerblue;"></i></h1>
     <table id="taskTable">
         <thead>
         <tr>
@@ -60,7 +61,7 @@
 
 
 <script>
-    // Firebase configuration
+
     const firebaseConfig = {
         apiKey: "AIzaSyDSQldYHWuR_XHxECwKS-rnfkcq7SRber8",
         authDomain: "h0useh0ld-ch0r3z.firebaseapp.com",
@@ -73,19 +74,37 @@
     // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
 
+    // Cleanup Firebase app before the page unloads
+    window.addEventListener('beforeunload', async () => {
+        try {
+            await app.delete();
+            console.log('Firebase app deleted successfully.');
+        } catch (error) {
+            console.error('Error deleting Firebase app:', error);
+        }
+    });
+
     // Initialize Firestore
     const db = firebase.firestore();
     const names = ["Elsie", "Hilary", "Jamie", "Liam"];
     const numWeeks = 12;
 
     function formatDate(date) {
-        const options = { day: '2-digit', month: 'short' };
-        return date.toLocaleDateString('en-GB', options);
+        // Using toISOString for consistent date string across devices
+        const isoDateString = date.toISOString().split('T')[0]; // YYYY-MM-DD format
+        const monthNames = [
+                 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+             ];
+        const monthIndex = date.getMonth();
+        const formattedMonth = monthNames[monthIndex];
+
+        const options = { day: '2-digit', month: 'short', year: 'numeric' };
+        return new Date(isoDateString).toLocaleDateString('en-GB', options).replace(/Sept/, formattedMonth);
     }
 
     function getMondayOfLastWeek() {
         const today = new Date();
-        const day = today.getDay();
+        const day = today.getDay() + 7;
         const diff = today.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
         return new Date(today.setDate(diff));
     }
@@ -368,26 +387,28 @@
                     week: newWeek
                 };
                 tasks.push(newTask);
-                if (nextTasker1 !== undefined) {
+                //send notifications
+                const earliestWeek = tasks.find(t => t.week === weeks[1]);
+                console.log("earliest week is " + earliestWeek);
+                if (earliestWeek.task1) {
                     console.log("Sending sms message for task1 to ", nextTasker1);
-                    sendSmsMessage("task1", nextTasker1);
+                    sendSmsMessage("task1", earliestWeek["task1"]);
                 }
-                if (nextTasker2 !== undefined) {
+                if (earliestWeek.task2) {
                     console.log("Sending sms message for task2 to ", nextTasker2);
-                    sendSmsMessage("task2", nextTasker2);
+                    sendSmsMessage("task2", earliestWeek["task2"]);
                 }
-                if (nextGardener !== undefined) {
+                if (earliestWeek.gardenTask) {
                     console.log("Sending sms message for gardenTask to ", nextGardener);
-                    sendSmsMessage("gardenTask", nextGardener);
+                    sendSmsMessage("gardenTask", earliestWeek["gardenTask"]);
                 }
-
             }
 
             // Update Firestore with the new tasks
             tasks.forEach(task => {
                 db.collection("tasks").doc(task.week).set(task, { merge: true })
                     .then(() => {
-                        console.log(`Tasks updated for week ${task.week}`);
+                        console.log(`Tasks updated for week ${task.week} and task ${task}`);
                     })
                     .catch((error) => {
                         console.error("Error updating tasks: ", error);
@@ -407,11 +428,9 @@
             case "Jamie":
                 return "+447577737248";
             case "Liam":
-                return "+447577737248";
-            case "Hilary":
-                return "+447577737248";
+                return "+447943028989";
             case "Elsie":
-                return "+447577737248";
+                return "+447926649373";
         }
         return "+447577737248";
     }
@@ -502,6 +521,7 @@
             for (let i = 0; i < weeks.length; i++) {
                 const week = weeks[i];
                 const task = tasks.find(t => t.week === week) || {};
+                console.log(`The week is ${week} and task ${task.task1}`);
                 const row = `<tr>
                         <td>${week}</td>
                         <td contenteditable="true" data-week="${week}" data-task="1">${task.task1 || ""}</td>
