@@ -6,8 +6,8 @@ const app = express();
 const PORT = 3000;
 
 // Twilio credentials
-const accountSid = 'AC0b3f294dc5f105b57110cb14239b9266';
-const authToken = '48e74042eedd64016ce212d1a086879c';
+const accountSid = undefined; // Add Twilio credentials
+const authToken = undefined;
 const client = new Twilio(accountSid, authToken);
 
 // Serve static files from the "assets" directory
